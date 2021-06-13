@@ -713,8 +713,12 @@ typedef struct pst_recurrence {
 typedef struct pst_item_appointment {
     /** mapi element 0x820d PR_OUTLOOK_EVENT_START_DATE */
     FILETIME   *start;
+    pst_string  tzstart;
+    int32_t    tzstartbias;
     /** mapi element 0x820e PR_OUTLOOK_EVENT_START_END */
     FILETIME   *end;
+    pst_string  tzend;
+    int32_t    tzendbias;
     /** mapi element 0x8208 PR_OUTLOOK_EVENT_LOCATION */
     pst_string  location;
     /** mapi element 0x8503 PR_OUTLOOK_COMMON_REMINDER_SET
@@ -1095,6 +1099,8 @@ char*           pst_rfc2425_datetime_format(const FILETIME* ft, int buflen, char
  * @return   time in rfc2445 format
  */
 char*           pst_rfc2445_datetime_format(const FILETIME* ft, int buflen, char* result);
+
+char*           pst_rfc2445_datetime_format_timezone(const FILETIME* ft, int buflen, char* result, int32_t bias);
 
 
 /** Convert the current time rfc2445 date/time format 19531015T231000Z

@@ -18,12 +18,15 @@ extern "C" {
        @param[out] result   pointer to output struct tm
      */
     void pst_fileTimeToStructTM (const FILETIME* filetime, struct tm *result);
+    void pst_fileTimeToStructTM_bias (const FILETIME *filetime, struct tm *result, int32_t tzBias);
 
     /** Convert a FILETIME to unix time_t value.
        @param[in]  filetime time structure to be converted
        @return     result time_t value
      */
     time_t pst_fileTimeToUnixTime( const FILETIME* filetime);
+
+    time_t pst_fileTimeToUnixTime_bias(const FILETIME *filetime, int32_t tzBias);
 
     /** Convert a FILETIME to string in date_format format.
        @param[in]  filetime    time structure to be converted

@@ -2160,6 +2160,55 @@ static pst_mapi_object* pst_parse_block(pst_file *pf, uint64_t block_id, pst_id2
 
 #define NULL_CHECK(x) { if (!x) { DEBUG_WARN(("NULL_CHECK: Null Found\n")); break;} }
 
+static void malloc_appointment(pst_item *item) {
+    MALLOC_APPOINTMENT(item)
+}
+
+static int16_t read_int_16(char *data)
+{
+    int16_t n = 0;
+    memcpy(&n, data, 2);
+    LE16_CPU(n);
+    return n;
+}
+
+static int32_t read_int_32(char *data)
+{
+    int32_t n = 0;
+    memcpy(&n, data, 4);
+    LE32_CPU(n);
+    return n;
+}
+
+static void copy_timezone(char *label, pst_string *targ, int32_t *targ_bias, pst_mapi_element *item) {
+    int16_t headerLength = read_int_16(item->data + 2);
+    int16_t length = 2 * read_int_16(item->data + 6);
+
+    int16_t ruleOffset = 8 + length;
+    int16_t nRules = read_int_16(item->data + ruleOffset);
+    //Start of first rule
+    ruleOffset = 4 + headerLength;
+
+    for (int rule = 0; rule < nRules; ++rule) {
+        int16_t flags = read_int_16(item->data + ruleOffset + 4);
+        // Is this rule the effective rule?
+        if ((flags & 0x0002) != 0) {
+            int32_t lBias = read_int_32(item->data + ruleOffset + 22);
+
+            *targ_bias = lBias;
+            break;
+        }
+        ruleOffset += 66;
+    }
+    targ->str = (char*) pst_realloc(targ->str, length);
+    // Poor mans utf16 to ascii conversion
+    int i;
+    for( i=0; i<length ; i+=2 ) {
+        targ->str[i / 2] = item->data[8 + i];
+    }
+    targ->str[length / 2] = 0;
+}
+
 
 /**
  * process the list of MAPI objects produced from parse_block()
@@ -3028,8 +3077,16 @@ static int pst_process(uint64_t block_id, pst_mapi_object *list, pst_item *item,
                 case 0x820d: // PR_OUTLOOK_EVENT_START_DATE
                     LIST_COPY_APPT_TIME("Appointment Date Start", item->appointment->start);
                     break;
+                case 0x825e: // PR_OUTLOOK_EVENT_START_TIMEZONE / PidLidAppointmentTimeZoneDefinitionStartDisplay
+                    malloc_appointment(item);
+                    copy_timezone("Appointment Timezone Start", &item->appointment->tzstart, &item->appointment->tzstartbias, list->elements[x]);
+                    break;
                 case 0x820e: // PR_OUTLOOK_EVENT_START_END
                     LIST_COPY_APPT_TIME("Appointment Date End", item->appointment->end);
+                    break;
+                case 0x825f: // ?
+                    malloc_appointment(item);
+                    copy_timezone("Appointment Timezone End", &item->appointment->tzend, &item->appointment->tzendbias, list->elements[x]);
                     break;
                 case 0x8214: // Label for an appointment
                     LIST_COPY_APPT_ENUM("Label for appointment", item->appointment->label, 0, 11,
@@ -3559,7 +3616,9 @@ void pst_freeItem(pst_item *item) {
         }
         if (item->appointment) {
             SAFE_FREE(item->appointment->start);
+            SAFE_FREE_STR(item->appointment->tzstart);
             SAFE_FREE(item->appointment->end);
+            SAFE_FREE_STR(item->appointment->tzend);
             SAFE_FREE_STR(item->appointment->location);
             SAFE_FREE(item->appointment->reminder);
             SAFE_FREE_STR(item->appointment->alarm_filename);
@@ -4377,6 +4436,16 @@ char* pst_rfc2445_datetime_format(const FILETIME* ft, int buflen, char* result) 
     return result;
 }
 
+char* pst_rfc2445_datetime_format_timezone(const FILETIME* ft, int buflen, char* result, int32_t bias) {
+    struct tm stm;
+    DEBUG_ENT("rfc2445_datetime_format");
+    pst_fileTimeToStructTM_bias(ft, &stm, bias);
+    if (strftime(result, buflen, "%Y%m%dT%H%M%S", &stm)==0) {
+        DEBUG_INFO(("Problem occurred formatting date\n"));
+    }
+    DEBUG_RET();
+    return result;
+}
 
 char* pst_rfc2445_datetime_format_now(int buflen, char* result) {
     struct tm stm;
